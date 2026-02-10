@@ -1,0 +1,326 @@
+[
+  {
+    "flow_id": "F001",
+    "parent_intent": "TripBooking",
+    "steps": [
+      {
+        "stage": "Start",
+        "current_intent": "Greeting",
+        "bot_question": "Greetings",
+        "user_utterance": "I want a trip to Rajasthan (Jaipur)",
+        "entity": "destination",
+        "next_intent": "Ask_Specific_Place"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Specific_Place",
+        "bot_question": "Where do you want to go specifically?",
+        "user_utterance": "What places are famous?",
+        "entity": "interest_type",
+        "next_intent": "Ask_Specific_Place"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Specific_Place",
+        "bot_question": "Jaipur, Udaipur, Jodhpur, Jaisalmer",
+        "user_utterance": "Which place has palaces and lakes?",
+        "entity": "preference",
+        "next_intent": "Ask_Specific_Place"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Specific_Place",
+        "bot_question": "Udaipur is famous for lakes and palaces",
+        "user_utterance": "Ok I want to visit Udaipur",
+        "entity": "destination",
+        "next_intent": "Ask_Caller_Location"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Caller_Location",
+        "bot_question": "Where are you calling from?",
+        "user_utterance": "Northeast",
+        "entity": "caller_location",
+        "next_intent": "Ask_Members"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Members",
+        "bot_question": "How many members are there?",
+        "user_utterance": "4 members",
+        "entity": "travelers",
+        "next_intent": "Ask_Members"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Members",
+        "bot_question": "Can it increase?",
+        "user_utterance": "Yes up to 6",
+        "entity": "travelers",
+        "next_intent": "Ask_Members"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Members",
+        "bot_question": "Any kids or senior citizens?",
+        "user_utterance": "No",
+        "entity": "kids_seniors",
+        "next_intent": "Ask_Duration"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Duration",
+        "bot_question": "For how many days?",
+        "user_utterance": "At least 4–5 days",
+        "entity": "duration",
+        "next_intent": "Ask_Duration"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Duration",
+        "bot_question": "Normally tour is 7 days (Jaipur, Udaipur, Mt Abu)",
+        "user_utterance": "We don’t have that much time",
+        "entity": "constraint",
+        "next_intent": "Ask_Duration"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Duration",
+        "bot_question": "Then Jaipur, Udaipur and Delhi sightseeing",
+        "user_utterance": "Ok works",
+        "entity": "confirmation",
+        "next_intent": "Ask_Travel_Mode"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Travel_Mode",
+        "bot_question": "Are you coming by train or flight?",
+        "user_utterance": "Flight",
+        "entity": "travel_mode",
+        "next_intent": "Ask_Travel_Mode"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Travel_Mode",
+        "bot_question": "Preferred arrival city?",
+        "user_utterance": "Jaipur",
+        "entity": "arrival_city",
+        "next_intent": "Ask_Cost"
+      },
+      {
+        "stage": "Pricing",
+        "current_intent": "Ask_Cost",
+        "bot_question": "Do you want approximate cost?",
+        "user_utterance": "No can u give use a costing of this 5 day trip",
+        "entity": "cost_request",
+        "next_intent": "Ask_Cost"
+      },
+      {
+        "stage": "Pricing",
+        "current_intent": "Ask_Cost",
+        "bot_question": "25k (5 seater), 42k (6 pax)",
+        "user_utterance": "Which car will you give?",
+        "entity": "car_type",
+        "next_intent": "Ask_Cost"
+      },
+      {
+        "stage": "Pricing",
+        "current_intent": "Ask_Cost",
+        "bot_question": "Dzire, Aura, Etios for 5 seater  /   \nErtiga, Innova, Crysta for 7 seater",
+        "user_utterance": "Is everything included ?",
+        "entity": "car_feature",
+        "next_intent": "Ask_Cost"
+      },
+      {
+        "stage": "Pricing",
+        "current_intent": "Ask_Cost",
+        "bot_question": "Yes AC, fuel included",
+        "user_utterance": "Driver allowance included?",
+        "entity": "inclusion",
+        "next_intent": "Ask_Cost"
+      },
+      {
+        "stage": "Pricing",
+        "current_intent": "Ask_Cost",
+        "bot_question": "Yes included",
+        "user_utterance": "Ok, So what are you basically?",
+        "entity": "continue",
+        "next_intent": "Ask_Hotel"
+      },
+      {
+        "stage": "Pricing",
+        "current_intent": "Ask_Cost",
+        "bot_question": "I am the owner",
+        "user_utterance": "Do you also handle South India tours?",
+        "entity": "ownership_role",
+        "next_intent": "Ask_Cost"
+      },
+      {
+        "stage": "Pricing",
+        "current_intent": "Ask_Cost",
+        "bot_question": "I cannot guarantee quality there\nI handle Delhi and Rajasthan easily as it is near",
+        "user_utterance": "Ok, Are these cars yours or booked from outside?",
+        "entity": "service_area",
+        "next_intent": "Ask_Cost"
+      },
+      {
+        "stage": "Pricing",
+        "current_intent": "Ask_Cost",
+        "bot_question": "These are mine only",
+        "user_utterance": NaN,
+        "entity": "car_ownership",
+        "next_intent": "Ask_Hotel"
+      },
+      {
+        "stage": "Pricing",
+        "current_intent": "Ask_Hotel",
+        "bot_question": "Dinner extra if required",
+        "user_utterance": "Can it be little cheaper?",
+        "entity": "negotiation",
+        "next_intent": "Ask_Hotel"
+      },
+      {
+        "stage": "Pricing",
+        "current_intent": "Ask_Hotel",
+        "bot_question": "I will try to give the best rate only",
+        "user_utterance": NaN,
+        "entity": "concern",
+        "next_intent": "Ask_Itinerary"
+      },
+      {
+        "stage": "Action",
+        "current_intent": "Ask_Itinerary",
+        "bot_question": "Yes i will send an itenary for jaipur , delhi and agra",
+        "user_utterance": "ok Will u be able t handle all these easily ?",
+        "entity": "confirmation",
+        "next_intent": "Ask_Payment"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Payment",
+        "bot_question": "\nI will share office details and previous customer contacts including \nonce from your current locations as well.",
+        "user_utterance": "No anyone can fake that",
+        "entity": "trust_issue",
+        "next_intent": "Ask_Payment"
+      },
+      {
+        "stage": "Info",
+        "current_intent": "Ask_Payment",
+        "bot_question": "Need 15k advance to blook car",
+        "user_utterance": "Ok I will check",
+        "entity": "itinerary_review",
+        "next_intent": "End"
+      },
+      {
+        "stage": "End",
+        "current_intent": "Ask_Itinerary",
+        "bot_question": "I will send in 30 minutes",
+        "user_utterance": "Let me see itenary first.",
+        "entity": "decision",
+        "next_intent": "End"
+      }
+    ]
+  },
+  {
+    "flow_id": NaN,
+    "parent_intent": NaN,
+    "steps": [
+      {
+        "stage": NaN,
+        "current_intent": "Ask_Hotel",
+        "bot_question": "-----",
+        "user_utterance": "Tell me about the hotels as well how much costing will come",
+        "entity": NaN,
+        "next_intent": NaN
+      },
+      {
+        "stage": NaN,
+        "current_intent": "Ask_Hotel",
+        "bot_question": "Consider 4k-5k per room.\nWhat type of hotel u want 2star, 3 or 4 star",
+        "user_utterance": "How about 3 star how huch will be the rate then ?",
+        "entity": NaN,
+        "next_intent": NaN
+      },
+      {
+        "stage": NaN,
+        "current_intent": "Ask_Hotel",
+        "bot_question": "All has 2.5k thousand diff\nso 3 star willl be 4k-5k per day",
+        "user_utterance": "Can it be little cheaper",
+        "entity": NaN,
+        "next_intent": NaN
+      },
+      {
+        "stage": NaN,
+        "current_intent": "Ask_Hotel",
+        "bot_question": "I will try best affordable price",
+        "user_utterance": "-------",
+        "entity": NaN,
+        "next_intent": NaN
+      },
+      {
+        "stage": NaN,
+        "current_intent": "Ask_Hotel",
+        "bot_question": "So u come and see if u like the hotel u stay.",
+        "user_utterance": "Hotel must be prebooked, cannot compromise on the quality.",
+        "entity": NaN,
+        "next_intent": NaN
+      },
+      {
+        "stage": NaN,
+        "current_intent": "Ask_Hotel",
+        "bot_question": "I will choose the best options only.",
+        "user_utterance": NaN,
+        "entity": NaN,
+        "next_intent": NaN
+      },
+      {
+        "stage": NaN,
+        "current_intent": "Ask_Itinerary",
+        "bot_question": NaN,
+        "user_utterance": "Can u send an itenary",
+        "entity": NaN,
+        "next_intent": NaN
+      },
+      {
+        "stage": NaN,
+        "current_intent": NaN,
+        "bot_question": "Yes easily.",
+        "user_utterance": "Can i view the itenary in the website ?",
+        "entity": NaN,
+        "next_intent": NaN
+      },
+      {
+        "stage": NaN,
+        "current_intent": NaN,
+        "bot_question": "There are not plans available there \nonly the pics of my cars and office.",
+        "user_utterance": "So how will be book then ?",
+        "entity": "trust_issue",
+        "next_intent": NaN
+      },
+      {
+        "stage": NaN,
+        "current_intent": "Ask_Payment",
+        "bot_question": "You can do it vai phone only",
+        "user_utterance": "Wouldnt it be a bit risky ?",
+        "entity": "trust_issue",
+        "next_intent": NaN
+      },
+      {
+        "stage": NaN,
+        "current_intent": NaN,
+        "bot_question": NaN,
+        "user_utterance": "Where is your office ?",
+        "entity": NaN,
+        "next_intent": NaN
+      },
+      {
+        "stage": NaN,
+        "current_intent": NaN,
+        "bot_question": "In Rajasthan Jaipur",
+        "user_utterance": "So how much shall i pay in advance ?",
+        "entity": NaN,
+        "next_intent": NaN
+      }
+    ]
+  }
+]

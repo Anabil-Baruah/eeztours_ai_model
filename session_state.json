@@ -1,0 +1,7 @@
+{
+  "current_state": "Ask_Specific_Place",
+  "context": {
+    "destination": "I want a trip to Rajasthan"
+  },
+  "last_step_index": 0
+}
