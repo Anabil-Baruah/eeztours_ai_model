@@ -1,7 +1,13 @@
 {
   "current_state": "Ask_Specific_Place",
   "context": {
-    "destination": "I want a trip to Rajasthan"
-  },
-  "last_step_index": 0
+    "destination": "I want a trip to Rajasthan (Jaipur)",
+    "travellers": null,
+    "duration": null,
+    "hotel_type": null,
+    "travel_mode": null,
+    "caller_location": null,
+    "interest_type": null,
+    "preference": null
+  }
 }

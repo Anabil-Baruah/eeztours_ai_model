@@ -1,131 +1,279 @@
 import json
-import difflib
+import math
 import os
+import re
 import sys
+from collections import Counter
 
 DATASET_FILE = 'data/dataset.json'
 STATE_FILE = 'session_state.json'
 
-def load_data():
+try:
+    # Optional OpenAI client
+    import openai  # type: ignore
+    OPENAI_AVAILABLE = True
+except Exception:
+    OPENAI_AVAILABLE = False
+
+
+def _load_env_from_dotenv():
+    base = os.path.dirname(__file__)
+    dotenv_path = os.path.join(base, ".env")
+    if os.path.exists(dotenv_path):
+        try:
+            with open(dotenv_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip('"').strip("'")
+                    if k and not os.getenv(k):
+                        os.environ[k] = v
+        except Exception:
+            pass
+
+_load_env_from_dotenv()
+
+
+# ---------- Data Loading ----------
+def load_flows():
     with open(DATASET_FILE, 'r', encoding='utf-8') as f:
-        flows = json.load(f)
-    # Flatten steps
-    all_steps = []
+        return json.load(f)
+
+
+def flatten_steps(flows):
+    steps = []
     for flow in flows:
-        all_steps.extend(flow['steps'])
-    return all_steps
+        for s in flow.get('steps', []):
+            steps.append(s)
+    return steps
+
+
+def build_state_index(steps):
+    # Group steps by current_intent to discover bot messages for states
+    states = {}
+    for s in steps:
+        cur = s['current_intent']
+        states.setdefault(cur, []).append(s)
+    return states
+
+
+# ---------- State Persistence ----------
+def default_context():
+    return {
+        "destination": None,
+        "travellers": None,
+        "duration": None,
+        "hotel_type": None,
+        "travel_mode": None,
+        "caller_location": None,
+        "interest_type": None,
+        "preference": None
+    }
+
 
 def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, 'r') as f:
-            return json.load(f)
-    return {"current_state": "Greeting", "context": {}, "last_step_index": -1}
+            st = json.load(f)
+            if 'context' not in st:
+                st['context'] = default_context()
+            else:
+                # ensure all expected keys exist
+                for k, v in default_context().items():
+                    st['context'].setdefault(k, v)
+            return st
+    return {"current_state": "Greeting", "context": default_context()}
+
 
 def save_state(state):
     with open(STATE_FILE, 'w') as f:
         json.dump(state, f, indent=2)
 
-def get_similarity(a, b):
-    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
+# ---------- Embeddings & Similarity ----------
+def tokenize(text):
+    return re.findall(r"[a-zA-Z0-9]+", text.lower())
+
+
+def bow_embedding(text):
+    # Simple bag-of-words frequency as fallback embedding
+    tokens = tokenize(text)
+    return Counter(tokens)
+
+
+def cosine_similarity(vec1, vec2):
+    if isinstance(vec1, Counter) and isinstance(vec2, Counter):
+        # BoW cosine
+        keys = set(vec1.keys()) | set(vec2.keys())
+        dot = sum(vec1[k] * vec2[k] for k in keys)
+        norm1 = math.sqrt(sum(v * v for v in vec1.values()))
+        norm2 = math.sqrt(sum(v * v for v in vec2.values()))
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+        return dot / (norm1 * norm2)
+    # Numeric vectors
+    dot = sum(a * b for a, b in zip(vec1, vec2))
+    n1 = math.sqrt(sum(a * a for a in vec1))
+    n2 = math.sqrt(sum(b * b for b in vec2))
+    if n1 == 0 or n2 == 0:
+        return 0.0
+    return dot / (n1 * n2)
+
+
+def embed_text(text):
+    # Try OpenAI embeddings; fallback to BoW
+    if OPENAI_AVAILABLE and os.getenv("OPENAI_API_KEY"):
+        try:
+            # OpenAI python v1 style (backward-compatible note: new SDKs may differ)
+            resp = openai.Embeddings.create(model="text-embedding-3-small", input=text)  # type: ignore
+            return resp['data'][0]['embedding']  # type: ignore
+        except Exception:
+            pass
+    return bow_embedding(text)
+
+
+# ---------- Entity Extraction ----------
 def extract_entity(user_text, entity_label):
-    # Simple extraction logic (placeholder for more complex NLP)
-    # If entity_label is 'destination', look for capitalized words not at start?
-    # For now, we return the user_text as a fallback or a dummy logic
-    # In a real tool, this would use NER.
-    # We will try to be smart: if the user utterance in JSON has the entity, 
-    # we might map the structure. 
-    # E.g. JSON: "I want a trip to Rajasthan (Jaipur)" -> Entity: Rajasthan
-    # User: "I want a trip to Kerala" -> Entity: Kerala
-    # This requires structural matching.
-    return user_text # Simplified
+    text = user_text.strip()
+    if not entity_label:
+        return None
+    label = entity_label.lower()
+    if label in ("travellers", "travelers", "members", "no_of_members", "number_of_travellers", "number_of_travelers"):
+        m = re.search(r"\b(\d+)\b", text)
+        return int(m.group(1)) if m else None
+    if label in ("duration", "days"):
+        m = re.search(r"\b(\d+)\s*(day|days|night|nights)?\b", text, re.IGNORECASE)
+        return f"{m.group(1)} {m.group(2) or 'days'}" if m else None
+    if label in ("caller_location", "location", "source"):
+        return text
+    if label in ("destination", "place"):
+        return text
+    if label in ("interest_type", "preference", "hotel_type", "travel_mode"):
+        return text
+    return text
+
+
+# ---------- LLM Fallback ----------
+def llm_fallback(current_state, current_bot_message, user_message):
+    # Try OpenAI chat; fallback to a safe, generic response
+    if OPENAI_AVAILABLE and os.getenv("OPENAI_API_KEY"):
+        try:
+            prompt = f"You are an enterprise travel booking assistant. Respond concisely and safely. Do not invent prices or confirm bookings. Encourage returning to the main flow.\n\nCurrent state: {current_state}\nUser message: {user_message}\nNext question to continue: {current_bot_message}\nProduce a brief, professional, non-committal response that addresses the user message and then guides back to the flow."
+            resp = openai.ChatCompletion.create(  # type: ignore
+                model="gpt-4.1-mini",
+                temperature=0.3,
+                messages=[{"role": "system", "content": prompt}]
+            )
+            return resp['choices'][0]['message']['content'].strip()  # type: ignore
+        except Exception:
+            pass
+    safe = "I can’t provide specific advice on that. Please check official advisories and local guidance. To continue with your booking, "
+    follow = current_bot_message if current_bot_message else "please provide the requested details."
+    return safe + follow
+
+
+# ---------- Main Logic ----------
+def valid_bot_message(msg):
+    return isinstance(msg, str) and msg.strip() != ""
+
+
+def first_bot_message_for_state(states_index, state_name):
+    for s in states_index.get(state_name, []):
+        bm = s.get("bot_question")
+        if valid_bot_message(bm):
+            return bm
+    return None
+
 
 def main(user_message):
-    data = load_data()
+    flows = load_flows()
+    steps = flatten_steps(flows)
+    states_index = build_state_index(steps)
     state = load_state()
-    
-    current_state = state['current_state']
-    last_idx = state['last_step_index']
-    
-    # 1. Filter candidates
-    # Candidates are steps where current_intent == current_state
+    current_state = state["current_state"]
+
+    # Identify current state's bot message (from JSON)
+    current_bot_message = first_bot_message_for_state(states_index, current_state) or ""
+
+    # Build candidate examples (user_utterance) for current_state
     candidates = []
-    for idx, step in enumerate(data):
-        if step['current_intent'] == current_state:
-            candidates.append((idx, step))
-            
-    # 2. Match Intent
-    best_match = None
-    best_score = 0
-    matched_idx = -1
-    
-    for idx, step in candidates:
-        score = get_similarity(user_message, step['user_utterance'])
+    for s in states_index.get(current_state, []):
+        if s.get("user_utterance"):
+            candidates.append(s)
+
+    # If no candidates for current_state, fallback
+    if not candidates:
+        reply = llm_fallback(current_state, current_bot_message or "", user_message)
+        response = {"reply": reply, "next_state": current_state, "context": state["context"]}
+        print(json.dumps(response, indent=2))
+        return
+
+    # Embedding for user message
+    user_emb = embed_text(user_message)
+
+    # Compute best match by cosine similarity
+    best = None
+    best_score = -1.0
+    for s in candidates:
+        ref_emb = embed_text(s["user_utterance"])
+        score = cosine_similarity(user_emb, ref_emb)
         if score > best_score:
             best_score = score
-            best_match = step
-            matched_idx = idx
-            
-    THRESHOLD = 0.4 # Lowered for demo robustness
-    
-    if best_score >= THRESHOLD:
-        # Match found
-        next_state = best_match['next_intent']
-        
-        # Entity Extraction
-        if best_match.get('entity'):
-            # Very basic extraction: 
-            # If the user utterance is "I want a trip to Rajasthan (Jaipur)"
-            # And user says "I want a trip to Kerala"
-            # We assume the diff is the entity.
-            # For now, just store the full message or a heuristic
-            entity_val = user_message 
-            state['context'][best_match['entity']] = entity_val
-            
-        # Determine Bot Reply
-        # Logic: Look at next step in sequence (matched_idx + 1)
-        # If it belongs to next_state, use its bot_question.
-        # Else, find first step of next_state.
-        
-        reply = "I'm not sure what to say."
-        next_step_idx = matched_idx + 1
-        
-        found_next = False
-        if next_step_idx < len(data):
-            next_step = data[next_step_idx]
-            # Check if this next step logically follows in the conversation flow
-            # The 'current_intent' of the next step should match the 'next_state' we just transitioned to
-            if next_step['current_intent'] == next_state:
-                reply = next_step['bot_question']
-                found_next = True
-        
-        if not found_next:
-            # Fallback: Find first step of next_state
-            for step in data:
-                if step['current_intent'] == next_state:
-                    reply = step['bot_question']
-                    break
-        
-        # Update State
-        state['current_state'] = next_state
-        state['last_step_index'] = matched_idx
+            best = s
+
+    THRESHOLD = 0.80 if (OPENAI_AVAILABLE and os.getenv("OPENAI_API_KEY")) else 0.55
+    if best and best_score >= THRESHOLD:
+        # Attempt entity extraction if required
+        entity_label = best.get("entity")
+        if entity_label:
+            key_for_check = "travellers" if entity_label in ("members", "travelers") else entity_label
+            current_val = state["context"].get(key_for_check)
+            if current_val is None:
+                extracted = extract_entity(user_message, entity_label)
+                if entity_label in ("members", "travelers"):
+                    # Normalize to 'travellers'
+                    if extracted is not None:
+                        state["context"]["travellers"] = extracted
+                else:
+                    if extracted is not None:
+                        state["context"][entity_label] = extracted
+
+        # If required entity still missing, re-ask current state's question
+        required_label = best.get("entity")
+        missing = False
+        if required_label:
+            check_key = "travellers" if required_label == "members" else required_label
+            if state["context"].get(check_key) in (None, ""):
+                missing = True
+
+        if missing:
+            reply = current_bot_message or "Please provide the requested information."
+            response = {"reply": reply, "next_state": current_state, "context": state["context"]}
+            print(json.dumps(response, indent=2))
+            return
+
+        # Advance to next state
+        next_state = best.get("next_intent")
+        # Determine next bot message from JSON for the next state
+        next_reply = first_bot_message_for_state(states_index, next_state) if next_state else None
+        if not next_reply:
+            # If next state not found, fallback safely
+            next_reply = llm_fallback(current_state, current_bot_message or "")
+            next_state = current_state
+
+        state["current_state"] = next_state
         save_state(state)
-        
-        response = {
-            "reply": reply,
-            "next_state": next_state,
-            "context": state['context']
-        }
+        response = {"reply": next_reply, "next_state": next_state, "context": state["context"]}
         print(json.dumps(response, indent=2))
-        
     else:
-        # LLM Fallback
-        response = {
-            "reply": "I apologize, but I can only assist with travel bookings. Could you please clarify your request regarding your trip?",
-            "next_state": current_state, # Don't advance
-            "context": state['context']
-        }
+        # LLM fallback without changing state
+        reply = llm_fallback(current_state, current_bot_message or "", user_message)
+        response = {"reply": reply, "next_state": current_state, "context": state["context"]}
         print(json.dumps(response, indent=2))
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
