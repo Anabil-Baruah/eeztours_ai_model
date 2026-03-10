@@ -123,15 +123,27 @@ def cosine_similarity(vec1, vec2):
     return dot / (n1 * n2)
 
 
+client = None
+
+if os.getenv("OPENAI_API_KEY"):
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    except Exception:
+        client = None
+
+
 def embed_text(text):
-    # Try OpenAI embeddings; fallback to BoW
-    if OPENAI_AVAILABLE and os.getenv("OPENAI_API_KEY"):
+    if client:
         try:
-            # OpenAI python v1 style (backward-compatible note: new SDKs may differ)
-            resp = openai.Embeddings.create(model="text-embedding-3-small", input=text)  # type: ignore
-            return resp['data'][0]['embedding']  # type: ignore
+            resp = client.embeddings.create(
+                model="text-embedding-3-small",
+                input=text
+            )
+            return resp.data[0].embedding
         except Exception:
             pass
+
     return bow_embedding(text)
 
 
@@ -158,21 +170,41 @@ def extract_entity(user_text, entity_label):
 
 # ---------- LLM Fallback ----------
 def llm_fallback(current_state, current_bot_message, user_message):
-    # Try OpenAI chat; fallback to a safe, generic response
-    if OPENAI_AVAILABLE and os.getenv("OPENAI_API_KEY"):
+
+    if client:
         try:
-            prompt = f"You are an enterprise travel booking assistant. Respond concisely and safely. Do not invent prices or confirm bookings. Encourage returning to the main flow.\n\nCurrent state: {current_state}\nUser message: {user_message}\nNext question to continue: {current_bot_message}\nProduce a brief, professional, non-committal response that addresses the user message and then guides back to the flow."
-            resp = openai.ChatCompletion.create(  # type: ignore
+            resp = client.chat.completions.create(
                 model="gpt-4.1-mini",
                 temperature=0.3,
-                messages=[{"role": "system", "content": prompt}]
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a travel booking assistant. Answer briefly and guide the user back to the booking flow."
+                    },
+                    {
+                        "role": "user",
+                        "content": user_message
+                    }
+                ]
             )
-            return resp['choices'][0]['message']['content'].strip()  # type: ignore
-        except Exception:
-            pass
-    safe = "I can’t provide specific advice on that. Please check official advisories and local guidance. To continue with your booking, "
-    follow = current_bot_message if current_bot_message else "please provide the requested details."
-    return safe + follow
+
+            answer = resp.choices[0].message.content.strip()
+
+            if current_bot_message:
+                return answer + "\n\n" + current_bot_message
+
+            return answer
+
+        except Exception as e:
+            print("LLM error:", e)
+
+    # fallback if LLM unavailable
+    if current_bot_message:
+        return f"I didn't fully understand that. {current_bot_message}"
+
+    return "Hello! How can I help you with your travel plans?"
+
+
 
 
 # ---------- Main Logic ----------
