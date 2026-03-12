@@ -15,6 +15,15 @@ try:
 except Exception:
     OPENAI_AVAILABLE = False
 
+from google import genai
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+gemini_client = None
+if GEMINI_KEY:
+    try:
+        gemini_client = genai.Client(api_key=GEMINI_KEY)
+    except Exception as e:
+        print("Gemini init error:", e)
+
 
 def _load_env_from_dotenv():
     base = os.path.dirname(__file__)
@@ -171,24 +180,25 @@ def extract_entity(user_text, entity_label):
 # ---------- LLM Fallback ----------
 def llm_fallback(current_state, current_bot_message, user_message):
 
-    if client:
+    if gemini_client:
         try:
-            resp = client.chat.completions.create(
-                model="gpt-4.1-mini",
-                temperature=0.3,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a travel booking assistant. Answer briefly and guide the user back to the booking flow."
-                    },
-                    {
-                        "role": "user",
-                        "content": user_message
-                    }
-                ]
+            prompt = f"""
+                You are a travel booking assistant.
+
+                User message: {user_message}
+
+                Answer briefly and then guide the user back to the booking flow.
+
+                Next question in flow:
+                {current_bot_message}
+                """
+
+            response = gemini_client.models.generate_content(
+                model="models/gemini-2.5-flash",
+                contents=prompt
             )
 
-            answer = resp.choices[0].message.content.strip()
+            answer = response.text.strip()
 
             if current_bot_message:
                 return answer + "\n\n" + current_bot_message
@@ -196,16 +206,13 @@ def llm_fallback(current_state, current_bot_message, user_message):
             return answer
 
         except Exception as e:
-            print("LLM error:", e)
+            print("Gemini error:", e)
 
-    # fallback if LLM unavailable
+    # safe fallback
     if current_bot_message:
         return f"I didn't fully understand that. {current_bot_message}"
 
-    return "Hello! How can I help you with your travel plans?"
-
-
-
+    return "Hello! How can I help you plan your travel?"
 
 # ---------- Main Logic ----------
 def valid_bot_message(msg):
