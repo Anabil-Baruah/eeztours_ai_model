@@ -8,13 +8,6 @@ from collections import Counter
 DATASET_FILE = 'data/dataset.json'
 STATE_FILE = 'session_state.json'
 
-try:
-    # Optional OpenAI client
-    import openai  # type: ignore
-    OPENAI_AVAILABLE = True
-except Exception:
-    OPENAI_AVAILABLE = False
-
 from google import genai
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 gemini_client = None
@@ -132,27 +125,7 @@ def cosine_similarity(vec1, vec2):
     return dot / (n1 * n2)
 
 
-client = None
-
-if os.getenv("OPENAI_API_KEY"):
-    try:
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    except Exception:
-        client = None
-
-
 def embed_text(text):
-    if client:
-        try:
-            resp = client.embeddings.create(
-                model="text-embedding-3-small",
-                input=text
-            )
-            return resp.data[0].embedding
-        except Exception:
-            pass
-
     return bow_embedding(text)
 
 
@@ -263,7 +236,7 @@ def main(user_message):
             best_score = score
             best = s
 
-    THRESHOLD = 0.80 if (OPENAI_AVAILABLE and os.getenv("OPENAI_API_KEY")) else 0.55
+    THRESHOLD = 0.55
     if best and best_score >= THRESHOLD:
         # Attempt entity extraction if required
         entity_label = best.get("entity")
