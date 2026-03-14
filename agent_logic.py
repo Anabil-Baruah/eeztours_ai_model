@@ -5,18 +5,14 @@ import re
 import sys
 from collections import Counter
 
+try:
+    from sentence_transformers import SentenceTransformer
+    embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+except ImportError:
+    embedding_model = None
+
 DATASET_FILE = 'data/dataset.json'
 STATE_FILE = 'session_state.json'
-
-from google import genai
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-gemini_client = None
-if GEMINI_KEY:
-    try:
-        gemini_client = genai.Client(api_key=GEMINI_KEY)
-    except Exception as e:
-        print("Gemini init error:", e)
-
 
 def _load_env_from_dotenv():
     base = os.path.dirname(__file__)
@@ -37,6 +33,16 @@ def _load_env_from_dotenv():
             pass
 
 _load_env_from_dotenv()
+
+
+from google import genai
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+gemini_client = None
+if GEMINI_KEY:
+    try:
+        gemini_client = genai.Client(api_key=GEMINI_KEY)
+    except Exception as e:
+        print("Gemini init error:", e)
 
 
 # ---------- Data Loading ----------
@@ -126,6 +132,11 @@ def cosine_similarity(vec1, vec2):
 
 
 def embed_text(text):
+    if embedding_model is not None:
+        try:
+            return embedding_model.encode(text).tolist()
+        except Exception:
+            return bow_embedding(text)
     return bow_embedding(text)
 
 
