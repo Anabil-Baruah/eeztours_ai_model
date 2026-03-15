@@ -22,14 +22,6 @@
       {
         "stage": "Info",
         "current_intent": "Ask_Specific_Place",
-        "bot_question": "Jaipur, Udaipur, Jodhpur, Jaisalmer",
-        "user_utterance": "Which place has palaces and lakes?",
-        "entity": "preference",
-        "next_intent": "Ask_Specific_Place"
-      },
-      {
-        "stage": "Info",
-        "current_intent": "Ask_Specific_Place",
         "bot_question": "Udaipur is famous for lakes and palaces",
         "user_utterance": "Ok I want to visit Udaipur",
         "entity": "destination",
@@ -71,7 +63,7 @@
         "stage": "Info",
         "current_intent": "Ask_Duration",
         "bot_question": "For how many days?",
-        "user_utterance": "At least 4–5 days",
+        "user_utterance": "At least 4 days",
         "entity": "duration",
         "next_intent": "Ask_Duration"
       },
@@ -79,7 +71,7 @@
         "stage": "Info",
         "current_intent": "Ask_Duration",
         "bot_question": "Normally tour is 7 days (Jaipur, Udaipur, Mt Abu)",
-        "user_utterance": "We don’t have that much time",
+        "user_utterance": "We don't have that much time",
         "entity": "constraint",
         "next_intent": "Ask_Duration"
       },
@@ -167,7 +159,7 @@
         "stage": "Pricing",
         "current_intent": "Ask_Cost",
         "bot_question": "These are mine only",
-        "user_utterance": NaN,
+        "user_utterance": null,
         "entity": "car_ownership",
         "next_intent": "Ask_Hotel"
       },
@@ -183,7 +175,7 @@
         "stage": "Pricing",
         "current_intent": "Ask_Hotel",
         "bot_question": "I will try to give the best rate only",
-        "user_utterance": NaN,
+        "user_utterance": null,
         "entity": "concern",
         "next_intent": "Ask_Itinerary"
       },
