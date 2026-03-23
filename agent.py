@@ -278,50 +278,89 @@ SLOT_ORDER = [
     "destination",
     "travellers",
     "duration",
-    "hotel_type",
     "travel_mode",
+    "hotel_type",
     "caller_location",
     "interest_type",
     "preference"
 ]
 
+SLOT_TO_STATE = {
+    "destination": "Ask_Destination",
+    "travellers": "Ask_Members",
+    "duration": "Ask_Duration",
+    "travel_mode": "Ask_Travel_Mode",
+    "hotel_type": "Ask_Hotel_Type",
+    "caller_location": "Ask_Location",
+    "interest_type": "Ask_Interest",
+    "preference": "Ask_Preference"
+}
+
 def valid_bot_message(msg):
     return isinstance(msg, str) and msg.strip() != ""
 
 
-def first_bot_message_for_state(states_index, state_name, context, available_entities):
-    # Find the next missing slot in the preferred order that is actually in the dataset
-    next_missing_slot = None
-    for slot in SLOT_ORDER:
-        if slot not in available_entities:
-            continue
-        if context.get(slot) in (None, "", []):
-            next_missing_slot = slot
-            break
-    
-    # Try to find a question in the current state that matches the next missing slot
+def first_bot_message_for_state(states_index, state_name):
+    # Simply return the first valid bot message for this state
     for s in states_index.get(state_name, []):
-        entity_label = s.get("entity")
-        if entity_label:
-            # Normalize key
-            key = "travellers" if entity_label in ("members", "travelers", "travellers", "no_of_members", "number_of_travellers", "number_of_travelers") else entity_label
-            
-            # If this step is for the next missing slot, return its question
-            if key == next_missing_slot:
-                bm = s.get("bot_question")
-                if valid_bot_message(bm):
-                    return bm
-            
-            # Skip if it's already filled or not the next one we want
-            continue
-        
-        # If there's no entity label, it's a general question for this state
-        # We only return it if we haven't found a specific slot question yet
         bm = s.get("bot_question")
-        if valid_bot_message(bm):
+        if bm and isinstance(bm, str) and bm.strip() != "":
             return bm
-            
     return None
+
+
+def is_question(text):
+    text = text.lower().strip()
+    question_patterns = [
+        r"\bwhat\b", r"\bwhy\b", r"\bhow\b", r"\bwhen\b", r"\bwhere\b", r"\bwhich\b",
+        r"\bcan you\b", r"\bcould you\b", r"\bdo you\b", r"\btell me\b", r"\bexplain\b",
+        r"\brates\b", r"\bprice\b", r"\bcost\b", r"\bbest hotel\b", r"\brecommend\b"
+    ]
+    if text.endswith("?"):
+        return True
+    for pattern in question_patterns:
+        if re.search(pattern, text):
+            return True
+    return False
+
+
+def is_slot_relevant(text, slot):
+    text = text.lower().strip()
+    if not text:
+        return False
+    
+    if slot == "destination":
+        # Destination should look like a place name (handled by regex/LLM extraction, here just a basic check)
+        # We allow it if it's reasonably short or contains "to"
+        return len(text.split()) <= 5 or "to" in text or "visit" in text
+    elif slot == "travellers":
+        # Travellers should contain a number
+        return any(char.isdigit() for char in text) or any(word in text for word in ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "couple", "family"])
+    elif slot == "duration":
+        # Duration should contain time words
+        time_words = ["day", "week", "month", "night", "days", "weeks", "months", "nights"]
+        return any(word in text for word in time_words)
+    elif slot == "travel_mode":
+        # travel_mode -> train, flight, bus, car
+        modes = ["train", "flight", "bus", "car", "plane", "taxi"]
+        return any(mode in text for mode in modes)
+    elif slot == "hotel_type":
+        # hotel_type -> budget, luxury, 3 star, 4 star, resort
+        types = ["budget", "luxury", "star", "resort", "hotel", "homestay", "hostel"]
+        return any(t in text for t in types)
+    elif slot == "caller_location":
+        # caller_location -> city name
+        return len(text.split()) <= 3
+    elif slot == "interest_type":
+        # interest_type -> adventure, cultural, wildlife, relaxation
+        interests = ["adventure", "cultural", "wildlife", "relaxation", "trekking", "sightseeing", "beach", "history"]
+        return any(interest in text for interest in interests)
+    elif slot == "preference":
+        # preference -> view, luxury, budget, near beach, etc.
+        prefs = ["view", "luxury", "budget", "beach", "pool", "garden", "wifi", "ac"]
+        return any(pref in text for pref in prefs)
+    
+    return True
 
 
 def main(user_message):
@@ -331,151 +370,112 @@ def main(user_message):
     state = load_state()
     current_state = state["current_state"]
     
-    # Get set of all entities available in the dataset for validation
-    available_entities = set()
-    for s in steps:
-        ent = s.get("entity")
-        if ent:
-            available_entities.add(ent)
-            # Add common normalizations
-            if ent in ("members", "travelers", "travellers", "no_of_members", "number_of_travellers", "number_of_travelers"):
-                available_entities.add("travellers")
-
     # Identify current state's bot message (from JSON)
-    current_bot_message = first_bot_message_for_state(states_index, current_state, state["context"], available_entities) or ""
+    current_bot_message = first_bot_message_for_state(states_index, current_state) or ""
 
-    # --- Pre-similarity Entity Extraction ---
-    # Check if the current state expects an entity
-    for s in states_index.get(current_state, []):
-        entity_label = s.get("entity")
-        if entity_label:
-            extracted = extract_entity(user_message, entity_label)
-            if extracted is not None:
-                # Normalize entity keys
-                key_to_store = "travellers" if entity_label in ("members", "travelers", "travellers", "no_of_members", "number_of_travellers", "number_of_travelers") else entity_label
-                state["context"][key_to_store] = extracted
-                
-                # Debug logs
-                print("Current state:", current_state)
-                print("Extracted entity:", extracted)
-                print("Context after update:", state["context"])
-                
-                # Determine the next_intent
-                next_intent = s.get("next_intent")
-                if next_intent:
-                    # Fetch the next state's bot question
-                    next_reply = first_bot_message_for_state(states_index, next_intent, state["context"], available_entities)
-                    
-                    # If the next state's questions are all filled, recursively find the next state
-                    while next_reply is None:
-                        # Find the next intent from the last step of the current next_intent
-                        steps_for_intent = states_index.get(next_intent, [])
-                        if not steps_for_intent:
-                            break
-                        last_step = steps_for_intent[-1]
-                        new_next = last_step.get("next_intent")
-                        if not new_next or new_next == next_intent:
-                            break
-                        next_intent = new_next
-                        next_reply = first_bot_message_for_state(states_index, next_intent, state["context"], available_entities)
+    # --- 1. Determine the expected slot ---
+    current_slot = None
+    for slot in SLOT_ORDER:
+        if state["context"].get(slot) is None:
+            current_slot = slot
+            break
+    
+    # --- 2. Create a slot relevance check & Detect general questions ---
+    is_rel = is_slot_relevant(user_message, current_slot) if current_slot else False
+    is_ques = is_question(user_message)
+    
+    # Trigger LLM fallback if it's a question OR not relevant to current slot
+    # (Exception: if it's a greeting, we might not want fallback, but let's follow instructions)
+    fallback_triggered = is_ques or not is_rel
+    
+    # Special case: if it's a simple greeting like "hi", don't necessarily trigger fallback as "not relevant"
+    if user_message.lower().strip() in ["hi", "hello", "hey", "greetings"]:
+        fallback_triggered = False
 
-                    if next_reply:
-                        state["current_state"] = next_intent
-                        save_state(state)
-                        print("Next state:", next_intent)
-                        response = {"reply": next_reply, "next_state": next_intent, "context": state["context"]}
-                        print(json.dumps(response, indent=2))
-                        return
-
-    # Build candidate examples (user_utterance) for current_state
-    candidates = []
-    for s in states_index.get(current_state, []):
-        if s.get("user_utterance"):
-            candidates.append(s)
-
-    # If no candidates for current_state, fallback
-    if not candidates:
-        reply = llm_fallback(current_state, current_bot_message or "", user_message)
-        response = {"reply": reply, "next_state": current_state, "context": state["context"]}
-        print(json.dumps(response, indent=2))
-        return
-
-    # Embedding for user message
-    user_emb = embed_text(user_message)
-
-    # Compute best match by cosine similarity
-    best = None
-    best_score = -1.0
-    for s in candidates:
-        ref_emb = embed_text(s["user_utterance"])
-        score = cosine_similarity(user_emb, ref_emb)
-        if score > best_score:
-            best_score = score
-            best = s
-
-    THRESHOLD = 0.35
-    if best and best_score >= THRESHOLD:
-        # Attempt entity extraction if required (for similarity matches)
-        entity_label = best.get("entity")
-        extracted = None
-        if entity_label:
-            context_key = "travellers" if entity_label in ("members", "travelers", "travellers", "no_of_members", "number_of_travellers", "number_of_travelers") else entity_label
-            current_val = state["context"].get(context_key)
-            if current_val in (None, "", []):
-                extracted = extract_entity(user_message, entity_label)
-                if extracted is not None:
-                    state["context"][context_key] = extracted
-                    # Debug logs
-                    print("Current state:", current_state)
-                    print("Extracted entity:", extracted)
-                    print("Context after update:", state["context"])
-
-        # If required entity still missing, re-ask current state's question
-        required_label = best.get("entity")
-        missing = False
-        if required_label:
-            check_key = "travellers" if required_label in ("members", "travelers", "travellers", "no_of_members", "number_of_travellers", "number_of_travelers") else required_label
-            if state["context"].get(check_key) in (None, "", []):
-                missing = True
-
-        if missing:
-            reply = current_bot_message or "Please provide the requested information."
-            response = {"reply": reply, "next_state": current_state, "context": state["context"]}
-            print(json.dumps(response, indent=2))
-            return
-
-        # Advance to next state
-        next_state = best.get("next_intent")
-        # Determine next bot message from JSON for the next state
-        next_reply = first_bot_message_for_state(states_index, next_state, state["context"], available_entities) if next_state else None
+    # --- 3. Entity Extraction & Context Update (Only if not fallback) ---
+    extracted_slot = None
+    if not fallback_triggered and current_slot:
+        # Try to extract the entity for the current expected slot
+        entity_label = None
+        for s in steps:
+            ent = s.get("entity")
+            if ent:
+                key = "travellers" if ent in ("members", "travelers", "travellers", "no_of_members", "number_of_travellers", "number_of_travelers") else ent
+                if key == current_slot:
+                    entity_label = ent
+                    break
         
-        # If the next state's questions are all filled, recursively find the next state
-        while next_reply is None and next_state:
-            steps_for_intent = states_index.get(next_state, [])
-            if not steps_for_intent:
-                break
-            last_step = steps_for_intent[-1]
-            new_next = last_step.get("next_intent")
-            if not new_next or new_next == next_state:
-                break
-            next_state = new_next
-            next_reply = first_bot_message_for_state(states_index, next_state, state["context"], available_entities)
+        if not entity_label:
+            entity_label = current_slot
+            
+        extracted = extract_entity(user_message, entity_label)
+        if extracted is not None:
+            state["context"][current_slot] = extracted
+            extracted_slot = current_slot
 
+        # If still not extracted, try similarity matching
+        if extracted_slot is None:
+            candidates = [s for s in states_index.get(current_state, []) if s.get("user_utterance")]
+            if candidates:
+                user_emb = embed_text(user_message)
+                best = None
+                best_score = -1.0
+                for s in candidates:
+                    ref_emb = embed_text(s["user_utterance"])
+                    score = cosine_similarity(user_emb, ref_emb)
+                    if score > best_score:
+                        best_score = score
+                        best = s
+
+                THRESHOLD = 0.35
+                if best and best_score >= THRESHOLD:
+                    entity_label = best.get("entity")
+                    if entity_label:
+                        extracted = extract_entity(user_message, entity_label)
+                        if extracted is not None:
+                            key_to_store = "travellers" if entity_label in ("members", "travelers", "travellers", "no_of_members", "number_of_travellers", "number_of_travelers") else entity_label
+                            state["context"][key_to_store] = extracted
+                            extracted_slot = key_to_store
+
+    # --- 4. Determine Next State based on Missing Slots ---
+    next_slot = None
+    for slot in SLOT_ORDER:
+        if state["context"].get(slot) is None:
+            next_slot = slot
+            break
+    
+    if next_slot:
+        next_state = SLOT_TO_STATE[next_slot]
+        next_reply = first_bot_message_for_state(states_index, next_state)
         if not next_reply:
-            # If next state not found, fallback safely
-            next_reply = llm_fallback(current_state, current_bot_message or "", user_message)
-            next_state = current_state
-
-        state["current_state"] = next_state
-        save_state(state)
-        print("Next state:", next_state)
-        response = {"reply": next_reply, "next_state": next_state, "context": state["context"]}
-        print(json.dumps(response, indent=2))
+            next_reply = f"Could you please tell me about your {next_slot.replace('_', ' ')}?"
     else:
-        # LLM fallback without changing state
-        reply = llm_fallback(current_state, current_bot_message or "", user_message)
-        response = {"reply": reply, "next_state": current_state, "context": state["context"]}
-        print(json.dumps(response, indent=2))
+        next_state = "Booking_Complete"
+        next_reply = "Thank you! I have collected all the details for your trip. We will get back to you soon."
+
+    # --- 5. Debugging logs ---
+    print("User message:", user_message)
+    print("Current slot:", current_slot)
+    print("Slot relevance:", is_rel)
+    print("Question detected:", is_ques)
+    print("Fallback triggered:", fallback_triggered)
+    print("Context now:", state["context"])
+    print("Next slot:", next_slot)
+    print("Next state:", next_state)
+
+    # --- 6. Save and Return ---
+    state["current_state"] = next_state
+    save_state(state)
+    
+    if fallback_triggered:
+        # LLM answers the question AND guides back to the flow
+        # We use next_reply which is the question for the current (still missing) slot
+        reply = llm_fallback(next_state, next_reply, user_message)
+    else:
+        reply = next_reply
+
+    response = {"reply": reply, "next_state": next_state, "context": state["context"]}
+    print(json.dumps(response, indent=2))
 
 
 if __name__ == "__main__":
